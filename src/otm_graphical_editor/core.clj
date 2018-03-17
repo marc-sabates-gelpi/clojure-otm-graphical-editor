@@ -1,22 +1,14 @@
 (ns otm-graphical-editor.core
   (:require [clojure.string :as s]
-            [clojure.set :refer [union difference]])
+            [clojure.set :refer [union difference]]
+            [otm-graphical-editor.image :as i])
   (:gen-class))
-
-(def ^:const colour-white \O)
 
 (defn- string->char-or-num
   "Returns char or number"
   [x]
   (let [xx (read-string x)]
     (if (number? xx) xx (first (seq x)))))
-
-(defn- make-image
-  "Makes a cols x rows image with the especified colour"
-  [cols rows & [colour & _]]
-  (let [colour (or colour colour-white)
-        r (vec (repeat rows colour))]
-    (vec (repeat cols r))))
 
 (defmulti run-cmd
   "Execute image commands"
@@ -26,21 +18,21 @@
   ^{:doc "I M N​
    Create a new M x N image with all pixels coloured white (O)"}
   [_ _ [cols rows]]
-  (make-image rows cols))
+  (i/make-image cols rows i/colour-white))
 
 (defmethod run-cmd :c
   ^{:doc "C​
    Clears the table, setting all pixels to white (O)"}
   [image & _]
-  (make-image (count (first image)) (count image)))
+  (i/make-image (i/get-num-cols image) (i/get-num-rows image) i/colour-white))
 
 (defmethod run-cmd :l
   ^{:doc "L X Y C​
    Colours the pixel (X,Y) with colour C"}
   [image _ [col row colour]]
-  (let [pixel [(dec row) (dec col)]]
-    (if (get-in image pixel)
-      (assoc-in image pixel (or colour colour-white))
+  (let [pixel [col row]]
+    (if (i/get-pixel image pixel)
+      (i/set-pixel image pixel (or colour i/colour-white))
       image)))
 
 (defmethod run-cmd :v
@@ -48,13 +40,12 @@
    Draw a vertical segment of colour C in column X between rows Y1 and 
    Y2 (inclusive)"}
   [image _ [col r1 r2 colour]]
-  (let [col (dec col)
-        pixels (for [r (range (dec r1) r2)] [r col])
-        colour (or colour colour-white)]
+  (let [pixels (for [r (range r1 (inc r2))] [col r])
+        colour (or colour i/colour-white)]
     (if (and
-         (get-in image [(dec r1) col])
-         (get-in image [(dec r2) col]))
-      (reduce (fn [image pixel] (assoc-in image pixel colour)) image pixels)
+         (i/get-pixel image [col r1])
+         (i/get-pixel image [col r2]))
+      (reduce (fn [image pixel] (i/set-pixel image pixel colour)) image pixels)
       image)))
 
 (defmethod run-cmd :h
@@ -62,34 +53,33 @@
    Draw a horizontal segment of colour C in row Y between columns X1 and
    X2 (inclusive)"}
   [image _ [c1 c2 row colour]]
-  (let [row (dec row)
-        pixels (for [c (range (dec c1) c2)] [row c])
-        colour (or colour colour-white)]
+  (let [pixels (for [c (range c1 (inc c2))] [c row])
+        colour (or colour i/colour-white)]
     (if (and
-         (get-in image [row (dec c1)])
-         (get-in image [row (dec c2)]))
-      (reduce (fn [image pixel] (assoc-in image pixel colour)) image pixels)
+         (i/get-pixel image [c1 row])
+         (i/get-pixel image [c2 row]))
+      (reduce (fn [image pixel] (i/set-pixel image pixel colour)) image pixels)
       image)))
 
 (defn- adjacents
   "Gets a set of valid adjacent pixel coordinates"
-  [image [x y]]
+  [image [c r]]
   (->> (into
-        (for [xx '(1 -1)] [(+ x xx) y])
-        (for [yy '(1 -1)] [x (+ y yy)]))
-       (filter #(let [v (get-in image %)] (if v %)))
+        (for [cc '(1 -1)] [(+ c cc) r])
+        (for [rr '(1 -1)] [c (+ r rr)]))
+       (filter #(let [v (i/get-pixel image %)] (if v %)))
        set))
  
 (defn- find-region
   "Gets the set of pixel's coordinates for the pixel's region"
   [image pixel]
-  (let [colour (get-in image pixel)]
+  (let [colour (i/get-pixel image pixel)]
     (loop [region #{} visited #{} to-visit #{pixel}]
       (if (empty? to-visit)
         region
         (let [current (first to-visit)]
           (recur
-           (if (= colour (get-in image current))
+           (if (= colour (i/get-pixel image current))
              (conj region current)
              region)
            (conj visited current)
@@ -103,15 +93,15 @@
    belongs to R. Any other pixel which is the same colour as (X,Y) and
    shares a common side with any pixel in R also belongs to this region"}
   [image _ [col row colour]]
-  (let [row (dec row) col (dec col)]
-    (reduce (fn [image pixel] (assoc-in image pixel colour)) image (find-region image [row col]))))
+  (let [pixel [col row]]
+    (reduce (fn [image pixel] (i/set-pixel image pixel colour)) image (find-region image pixel))))
 
 (defmethod run-cmd :s
   ^{:doc "S​
    Show the contents of the current image"}
   [image & _]
   (do
-    (doseq [x image] (println (apply str x)))
+    (doseq [x (i/get-rows image)] (println (apply str x)))
     image))
 
 (defmethod run-cmd :x
