@@ -4,6 +4,13 @@
             [otm-graphical-editor.image :as i])
   (:gen-class))
 
+(def parse-while-xf (comp
+                        (map #(s/split % #" "))
+                        (map (fn [[cmd & args]]
+                               (vector (keyword (s/lower-case cmd))
+                                       (map string->char-or-num args))))
+                        (halt-when #(= % :x))))
+
 (defn- string->char-or-num
   "Returns char or number"
   [x]
@@ -67,7 +74,7 @@
   (->> (into
         (for [cc '(1 -1)] [(+ c cc) r])
         (for [rr '(1 -1)] [c (+ r rr)]))
-       (filter #(let [v (i/get-pixel image %)] (if v %)))
+       (filter #(when (i/get-pixel image %) %))
        set))
  
 (defn- find-region
@@ -75,7 +82,7 @@
   [image pixel]
   (let [colour (i/get-pixel image pixel)]
     (loop [region #{} visited #{} to-visit #{pixel}]
-      (if (empty? to-visit)
+      (if (seq to-visit)
         region
         (let [current (first to-visit)]
           (recur
@@ -100,9 +107,8 @@
   ^{:doc "S​
    Show the contents of the current image"}
   [image & _]
-  (do
-    (doseq [x (i/get-rows image)] (println (apply str x)))
-    image))
+  (doseq [x (i/get-rows image)] (println (apply str x)))
+  image)
 
 (defmethod run-cmd :x
   ^{:doc "X​
@@ -113,28 +119,29 @@
 (defn- run-interactive
   "Runs the editor from the standard input"
   []
-  (loop [image [] line (read-line)]
+  (loop [image (i/make-empty-image) line (read-line)]
     (let [[cmd & args] (s/split line #" ")
           cmd (keyword (s/lower-case cmd))
           args (map string->char-or-num args)]
       (if (not= :x cmd)
         (recur (run-cmd image cmd args) (read-line))))))
 
-(defn- run-from-file [file]
+(defn- process-batch
+  "Parses the input lines and execute them"
+  [coll]
+  (transduce parse-while-xf
+             (completing (fn [image [cmd args]]
+                           (run-cmd image cmd args)))
+             (i/make-empty-image)
+             coll))
+
+(defn- run-from-file
   "Runs the editor in batch mode"
+  [file]
   (-> file
       slurp
-      (s/split-lines)
-      (as-> lines (transduce (comp
-                              (map #(s/split % #" "))
-                              (map (fn [[cmd & args]]
-                                     [(keyword (s/lower-case cmd))
-                                      (map string->char-or-num args)]))
-                              (halt-when #(= % :x)))
-                             (completing (fn [image [cmd args]]
-                                           (run-cmd image cmd args)))
-                             []
-                             lines))))
+      s/split-lines
+      process-batch))
 
 (defn -main
   "Runs the graphical editor"

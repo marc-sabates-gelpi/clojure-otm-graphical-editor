@@ -24,12 +24,18 @@
   [[col row]]
   [(dec row) (dec col)])
 
+(defn make-empty-image
+  "Makes and empty image"
+  []
+  (vector))
+
 (defn make-image
   "Makes a cols x rows image with the especified colour"
-  [cols rows & [colour & _]]
-  (let [colour (or colour colour-white)
-        r (vec (repeat cols colour))]
-    (vec (repeat rows r))))
+  ([cols rows]
+   (make-image cols rows colour-white))
+  ([cols rows colour]
+   (let [r (vec (repeat cols colour))]
+     (vec (repeat rows r)))))
 
 (defn set-pixel
   "Sets the colour of a pixel"
