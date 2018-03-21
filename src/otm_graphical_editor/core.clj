@@ -84,7 +84,6 @@
   (let [colour (i/get-pixel image pixel)]
     (loop [region #{} visited #{} to-visit (hash-set pixel)]
       (if (seq to-visit)
-        region
         (let [current (first to-visit)]
           (recur
            (if (= colour (i/get-pixel image current))
@@ -93,7 +92,8 @@
            (conj visited current)
            (union
             (disj to-visit current)
-            (difference (adjacents image current) visited))))))))
+            (difference (adjacents image current) visited))))
+        region))))
 
 (defmethod run-cmd :f
   ^{:doc "F X Y C​
